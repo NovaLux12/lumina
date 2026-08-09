@@ -1,53 +1,63 @@
 # lumina — Critical Review
 
-**Reviewer:** independent subagent (critical pass) · **Date:** 2026-08-09
+**Reviewer:** independent subagent (round 2 / critical pass) · **Date:** 2026-08-09
 
-## Verification performed (actual, not trusted)
+## Round history
 
-- `python3 -m pytest -q` → **27 passed in 0.01s** ✓ (claim holds — real count, pass green)
+- **Round 1:** 73/100. Five findings (3 MAJOR, 2 MINOR) plus three NITs. See preamble below for the full list.
+
+## Round 2 — background & verification performed (actual, not trusted)
+
+All commands run in the project venv.
+
+- `python3 -m pytest -q` → **40 passed** (fresh green; count rose 27 → 40) ✓
 - `ruff check src tests` → **All checks passed!** ✓
-- `python3 -m lumina --list-effects` (6) / `--list-palettes` (6) / `--version` (`lumina 1.0.0`) ✓
-- `python3 -m lumina --effect plasma --still 0.5 | head -3` → clean, exit 0, **no BrokenPipeError noise** ✓
-- `--gallery` → 240×144 valid PNG (sig + IHDR verified); `docs/gallery.png` present, valid, 240×144 ✓
-- `--png` export → valid 288×168 PNG frames using the stdlib writer ✓
-- Editable install + `lumina` console script + `python3 -m lumina` all work as documented ✓
-- Zero-dependency claim: all imports are stdlib (`argparse, math, os, select, shutil, struct, sys, termios, time, tty, zlib, typing, collections.abc`) ✓
-
-The headline claims are **true**. The material findings below are about depth of testing and robustness, not about the core render pipeline.
+- Zero-dependency: all imports confirmed stdlib (`argparse, math, os, select, shutil, struct, sys, termios, time, tty, zlib, typing, io, collections.abc, __future__`). `grep` over `src/lumina/*.py` returned only `from typing import Callable`. ✓
+- Non-TTY bounded run: `python3 -m lumina --effect plasma < /dev/null | wc -c` → **98,619 bytes, exit 0**. Single bounded frame, no MB/s firehose. ✓
+- `--still` redirect: piped output begins with truecolor RGB escapes (`38;2;`, `48;2;`, `▀`); **no `\x1b[2J` (erase screen) and no `\x1b[?25l`/`\x1b[?25h` (cursor) bytes**. ✓ Clean and scriptable.
+- `--gallery`, `--png`, `--export` all render correct dimensions via the stdlib PNG writer (sig + IHDR verified). ✓
 
 ---
 
-## Findings (by severity)
+## Verification of round-1 findings
 
-### 1. MAJOR — The "temporal periodicity" test is vacuously true (false coverage claim)
-`tests/test_effects.py::test_effects_are_temporal_periodic` asserts
-`fn(x, y, t) == fn(x, y, t + 0.0)` — identical arguments, so it is **always True** by construction. It duplicates `test_effects_are_deterministic` and yields zero signal about temporal periodicity, yet the README and test count both advertise "periodicity" as a covered property ("27 tests cover … periodicity", docstrings claim effects are "periodic in t").
-**Fix:** drop the `+0.0` tautology and test a real property — e.g. starfield/aurora/matrix use `_frac(t*speed)`, so assert `fn(x,y,t) == fn(x,y,t + 1/speed_lcm)` for a hand-picked period, or at minimum rename the test to what it actually checks (`determinism_revisit_same_t`) and stop claiming periodic coverage.
+1. **MAJOR — Non-TTY fallback streamed forever (~2.2 MB/s).** ✅ **FIXED.** `animate_interactive` now branches on `sys.stdin.isatty() and sys.stdout.isatty()`; piped/CI renders a bounded one-shot — `--frames` (default 1) frames at `i/fps` then exits. Measured 98.6 KB / exit 0. The termios cbreak block is reached only on the TTY path, so the bounded branch touches no terminal state — clean exit.
+2. **MAJOR — CLI/engine/gallery had zero tests.** ✅ **FIXED.** `tests/test_cli.py`, `tests/test_engine.py`, `tests/test_gallery.py` exist, run, and genuinely assert the claimed behaviours: unknown-effect/palette → exit `2`, alias resolution (`hyperspace`→starfield renders), `--still` clean-redirect, `capture(quiet=True/False)` churn gating, `export_stills`/`export_png_stills` exact file counts + dims, gallery count/width/height, non-TTY bounded frames (2 frames → 2 `RESET\n`).
+3. **MAJOR — periodicity test was vacuous (`t+0.0`).** ✅ **FIXED.** Now asserts real periods with `pytest.approx`:
+   - plasma `T=20π`: coeffs 1.3, 0.9, 1.7, 2.2 → `1.3·20π=26π=13·2π`, `0.9·20π=18π=9·2π`, `1.7·20π=34π=17·2π`, `2.2·20π=44π=22·2π` — all full rotations. Genuine common period.
+   - fire `T=4π`: coeffs 4.0, 2.5 → `4·4π=16π=8·2π`, `2.5·4π=10π=5·2π`. Genuine.
+   Both are mathematically real, non-tautological, and cover 3 + 2 sample points across the domain.
+4. **MINOR — `--still` polluted stdout with screen-clear/cursor sequences.** ✅ **FIXED.** `--still` now calls `capture(..., quiet=True)` → `frame + RESET`, no `2J`/cursor bytes. Verified + test-gated.
+5. **MINOR — README overclaimed coverage.** ✅ **MOSTLY FIXED.** README now states the honest 40-test count and describes real asserted behaviour. One residual overclaim remains (see finding B below).
+6. **NIT — dead `cols` param.** ✅ **FIXED.** `compose_gallery` signature replaced it with `effect_order` and uses curated `list_effects()` order.
+7. **NIT — gallery order diverged from curated order.** ✅ **FIXED.** Now `list_effects()`.
+8. **NIT — `capture(quiet=True)` omitted trailing RESET.** ✅ **FIXED.** Returns `frame + RESET`.
 
-### 2. MAJOR — CLI, engine, and gallery are 100% untested
-All 27 tests live in `test_ansi.py`, `test_effects.py`, `test_palettes.py`, `test_pngout.py`. **No test imports `cli.py`, `engine.py`, or `gallery.py` at all** (confirmed by grep). That leaves completely uncovered: the argparse CLI (unknown-effect exit codes, alias resolution on the CLI path, `--version`, exit-code contract), the interactive engine (termios/select, capture prefix/suffix, `export_stills`, `export_png_stills` dimensions, the non-TTY branch, the pause/fps key handling), and gallery composition (which is the flagship single-command portfolio feature with the committed asset).
-**Fix:** add `tests/test_cli.py` (capsys + monkeypatched argv: unknown effect → rc 2, `--list-*`, `--still` shape, BrokenPipeError swallowed) and `tests/test_engine.py` (capture contains ANSI, `export_stills`/`export_png_stills` produce exactly `frames` files and correct dims, non-TTY fallback terminates).
+---
 
-### 3. MAJOR — Non-TTY fallback streams frames **forever** (runaway output)
-With stdin not a TTY (e.g. `lumina --effect plasma < /dev/null`), `animate_interactive` enters the fallback `while True:` loop and prints unbounded frames at `--fps`. Measured: **~2.2 MB of output in 1 second** with no self-termination. This directly contradicts the code's own "non-TTY fallback must degrade gracefully" comment and means piping `lumina` into a file/pager/CI spawns a firehose only stoppable by SIGPIPE or Ctrl-C.
-**Fix:** in the non-TTY branch, when neither stdin nor stdout is a TTY, render a single frame (or a bounded `--frames` count) and exit rather than looping. This is a genuine robustness defect, not cosmetic.
+## New findings (round 2)
 
-### 4. MINOR — `--still` pollutes the piped output with terminal-control sequences
-`--still` calls `capture(..., quiet=False)`, which prepends `\x1b[2J` (full clear screen) and `\x1b[?25l`/`\x1b[?25h` (hide/show cursor) to the frame. The README markets `--still` as "great for scripting / docs", but redirecting it produces a screen-clear and cursor churn in the file/stream. Verified raw bytes begin `^[[2J^[[?25l…`.
-**Fix:** use `quiet=True` for `--still` (reserve `quiet=False` for the live loop), or add a `--no-clear` escape hatch so stills are cleanly redirectable.
+### MINOR–MODERATE — A. SIGPIPE handling is **incomplete**: piping to a tool that closes early still exits 120 and spews a trace
+`cli.main()` wraps `_run` in `try/except BrokenPipeError` and redirects fd 1 to `/dev/null`, documented as "pipes quietly … no noisy BrokenPipeError trace". **Reproducible 3/3**, the real-world `| head` case fails:
 
-### 5. MINOR — README overstates the test contract
-The README claims 27 tests cover "empty/single-anchor" palettes, "every effect's output bounds and determinism", "periodicity", and PNG "integrity". Reality: palette edge cases only exercise the `sample()` function with synthetic `[]`/single lists (the shipped registries are all ≥2 anchors, so nothing about the real library state is tested); every effect's bounds are checked at just **4 fixed (x,y,t) points**, not the domain; the "periodicity" claim is the vacuous test of finding #1. Balanced against this: PNG integrity IS genuinely tested (signature, IHDR fields, CRC, zlib decompress round-trip) — nice. Install instructions are accurate and reproduce exactly.
-**Fix:** either add real tests matching the prose, or soften the README claims to what is actually covered.
+```
+$ python3 -m lumina --effect plasma --still 0.5 | head -c 200 >/dev/null   # (2>/err captured)
+py_exit=120   stderr: "Exception ignored while flushing sys.stdout: BrokenPipeError"
+```
 
-### 6. NIT — `compose_gallery` accepts a `cols` parameter that is never used
-`cols: int = 3` is declared and documented, but the gallery is always built as a single horizontally-tiled strip (6 effects → 240×144). The parameter is dead API surface and silently misleading. If kept, implement multi-row wrapping; otherwise remove it.
+Root cause: `_run` writes the ~98 KB still into a **buffered** stdout. When the consumer closes the pipe (e.g. `head -c 200`), the `BrokenPipeError` surfaces during the **interpreter-shutdown flush of the TextIOWrapper** — *after* `main()` has returned — so the `try/except` and the fd-1 redirect never see it. Result: non-zero exit **120** (breaks `set -o pipefail` CI) and a noisy stderr line. This contradicts both the CLI docstring and the README's "SIGPIPE is swallowed" claim. The fix only covers the caught mid-write path. (Robust remedy: from the handler, also `sys.stdout = None`/close the wrapper, or set the handler to flush/abandon the stream so shutdown doesn't re-raise.)
 
-### 7. NIT — `compose_gallery` default order diverges from the curated order
-The gallery fallback uses `EFFECTS.keys()` (dict insertion order) instead of `list_effects()` / `_EFFECT_ORDER`. They coincide today, but the code already defines curated ordering elsewhere and the gallery quietly bypasses it — a latent inconsistency if the registry is ever reordered.
+### MINOR — B. The SIGPIPE test only covers the caught path, so it gives **false confidence**
+`test_cli.py::test_broken_pipe_is_swallowed` monkeypatches `sys.stdout` with a stub whose `write()` raises `BrokenPipeError` — this exercises exactly the path `main()`'s `try/except` *does* handle, and asserts `== 0`. It does **not** reproduce the real shutdown-flush failure above, so the suite is green while the actual pipe-to-`head` scenario fails. The test should pipe a real frame through a real closed pipe (subprocess) or flush-after-close to cover the defect. Also the README's "SIGPIPE is swallowed" bullet should be toned down until it is.
 
-### 8. NIT — `capture(quiet=True)` omits a trailing `RESET`
-The default live-loop/non-TTY path leaves the terminal in the last rendered fg/bg colour when streaming stops mid-frame. Cosmetic only, but easy to fix by always appending `RESET` unless quiet-rendering is explicitly intended.
+### NIT — C. Non-TTY default mode prints the interactive banner before the bounded frame
+Running `lumina --effect plasma < /dev/null | …` emits the `✨ lumina [plasma|nova] q to quit` banner line ahead of the single frame — a "q to quit" hint that is meaningless off a TTY and pollutes an otherwise clean redirected single frame. Bounded and harmless, but arguably the banner should be suppressed on the non-TTY one-shot path (users wanting pure output use `--still`, which is already clean).
+
+### NIT — D. `--still` frames are fixed at 96×28 regardless of a small terminal
+`_run`'s still branch hardcodes `DEFAULT_WIDTH/HEIGHT`; a terminal narrower than 96 cols (or `COLUMNS`) still gets a 96-wide frame. Defensible for reproducible scripting output, but worth a note that stills don't respect terminal size the way the live mode does.
+
+### Round-1 praised items still hold
+- Ruff clean ✓ · pytest green at **40** ✓ · stdlib-only ✓ · live `--gallery`/`--png`/`--export` verified ✓.
 
 ---
 
@@ -55,18 +65,18 @@ The default live-loop/non-TTY path leaves the terminal in the last rendered fg/b
 
 | Dimension (weight) | Score | Justification |
 |---|---|---|
-| Architecture & design (20) | **17** | Pure-function effects, clean registry, clean ansi/palettes/effects/engine/pngout/gallery separation, curated order + aliases. Docked: dead `cols` param, gallery order bypasses curation. |
-| Correctness & robustness (20) | **14** | Strong core: clamping, empty/single anchors, PNG integrity, zero-dep holds, SIGPIPE handled in `main`. Docked heavily for the unlimited non-TTY output loop and the `--still` control-churn. |
-| Test quality & coverage (15) | **8** | 27 real assertions for ansi/palettes/pngout/effects; PNG tests are genuinely good. But the periodicity test is a tautology, and CLI/engine/gallery are entirely untested; bounds only at 4 points, gamma untested. |
-| Documentation & packaging (15) | **11** | Features, commands and gallery asset verified accurate; install reproduces exactly; pyproject fields are solid. Docked for overclaiming test coverage and "great for scripting" contradicting `--still` noise. |
-| CLI ergonomics & UX (15) | **11** | Good flags, aliases, short forms, defaults, help. Docked: `--still` output not cleanly redirectable, non-TTY never bounds itself. |
-| Creativity & polish (10) | **8** | Coherent, well-crafted thing — deterministic art, thoughtful palettes, polished docs, real committed gallery asset. Not a toy. |
-| Maintainability (5) | **4** | Consistent naming and thorough docstrings throughout; only minor dead/chaff surface (`cols`, gallery order). |
-| **Total** | **73** | |
+| Architecture & design (20) | **18** | Pure-function effects, clean module split, curated order + aliases; dead `cols` removed, gallery now uses curated order. Minor: banner-before-frame on the non-TTY one-shot. |
+| Correctness & robustness (20) | **15** | Core render, clamping, determinism, PNG writer all correct; the big non-TTY firehose and `--still` churn are fixed. Docked for the residual incomplete-SIGPIPE defect (exit 120 + stderr noise on `\| head`). |
+| Test quality & coverage (15) | **12** | 40 tests now genuinely cover CLI/engine/gallery (round-1 gap closed) and periodicity is real (T=20π / 4π verified). Docked: SIGPIPE test covers only the caught path, missing the shutdown-flush failure; bounds/gamma still at few sample points. |
+| Documentation & packaging (15) | **12** | README honest on count/behaviour now; install and pyproject solid. Docked: residual "SIGPIPE is swallowed" overclaim, which finding A disproves. |
+| CLI ergonomics & UX (15) | **12** | Good flags, aliases, short forms, defaults; `--still` now clean and scriptable; non-TTY bounded. Docked: exit 120 + noise when piped to `head`, and the stray banner on the piped one-shot. |
+| Creativity & polish (10) | **8** | Coherent, well-crafted, deterministic; real committed gallery asset, thoughtful palettes. Not a toy. |
+| Maintainability (5) | **4** | Consistent naming, thorough docstrings, dead surface removed, single-responsibility modules. |
+| **Total** | **81** | |
 
 ---
 
 ## Bottom line
-lumina is a genuinely well-built zero-dependency art engine: the render pipeline, palette sampler, stdlib PNG writer and packaging are all correct and the 27 tests that exist are real. The honest weaknesses are **(a)** a falsely-labelled periodicity test, **(b)** zero tests for the CLI/engine/gallery — the very features that make it a "product" rather than a library — and **(c)** an unbounded non-TTY streaming loop. These are all fixable without touching the render core, which is the strongest part of the project.
+Every one of round-1's material findings (the firehose, the missing CLI/engine/gallery tests, the vacuous periodicity test, the `--still` control churn, the README overclaim, the dead `cols`/order nits, the missing RESET) is genuinely fixed, verified, not just claimed. The suite grew 27 → 40 real assertions across every layer and the periodicity tests are mathematically sound. What keeps it from the high 80s is one honest residual defect: the SIGPIPE handling is incomplete end-to-end — pipeline the still to `head`/a pager and you still get exit 120 plus a `BrokenPipeError` trace, and the test that claims this is covered only exercises the path that already worked. Fix that one path (and re-tone the README bullet) and this is an 85+ project. As it stands it is a genuinely good, well-tested, dependency-free art tool.
 
-SCORE: 73/100
+SCORE: 81/100

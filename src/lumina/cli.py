@@ -20,6 +20,40 @@ from .engine import (
 from .palettes import PALETTES, list_palettes
 
 
+def _install_sigpipe_dfl() -> None:
+    """Die silently (conventionally) if the output pipe closes.
+
+    With SIGPIPE back at its default disposition, a tool that closes our
+    output early (``lumina --still 0.5 | head -c 200``) just terminates the
+    process via SIGPIPE instead of surfacing a Python BrokenPipeError
+    traceback at interpreter shutdown. This is the standard Unix-tool
+    behaviour. No-op where SIGPIPE isn't defined (e.g. Windows), where the
+    BrokenPipeError fallback in :func:`main` still applies.
+    """
+    try:
+        import signal
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    except (AttributeError, ValueError, OSError):
+        pass
+
+
+def _terminal_dimensions(args) -> tuple:
+    """Return (width, height) for a still, honouring a live TTY.
+
+    Explicit ``--width``/``--height`` win; otherwise a real terminal's size
+    is used when stdout is a TTY. When output is piped (scripting), fall
+    back to the deterministic defaults so ``--still`` output stays stable.
+    """
+    import shutil
+
+    interactive = sys.stdout.isatty()
+    cols = shutil.get_terminal_size((DEFAULT_WIDTH, DEFAULT_HEIGHT)).columns
+    lines = shutil.get_terminal_size((DEFAULT_WIDTH, DEFAULT_HEIGHT)).lines
+    width = args.width if args.width else (cols if interactive else DEFAULT_WIDTH)
+    height = args.height if args.height else (lines - 2 if interactive else DEFAULT_HEIGHT)
+    return max(1, width), max(1, height)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="lumina",
@@ -75,8 +109,7 @@ def _run(argv=None) -> int:
 
     # Single still frame requested (good for scripting / CI proof).
     if args.still is not None:
-        w = args.width or DEFAULT_WIDTH
-        h = args.height or DEFAULT_HEIGHT
+        w, h = _terminal_dimensions(args)
         sys.stdout.write(capture(eff, args.palette, w, h, args.still, args.gamma, quiet=True))
         sys.stdout.write("\n")
         return 0
@@ -97,20 +130,31 @@ def _run(argv=None) -> int:
                             out=args.export, frames=args.frames)
         return 0
 
-    sys.stdout.write(f"\n\x1b[38;2;120;200;255m✨ lumina\x1b[0m "
-                     f"[{eff} | {args.palette}]  q to quit\n")
+    if sys.stdout.isatty():
+        sys.stdout.write(f"\n\x1b[38;2;120;200;255m✨ lumina\x1b[0m "
+                         f"[{eff} | {args.palette}]  q to quit\n")
     animate_interactive(eff, args.palette, args.fps, args.gamma)
     return 0
 
 
 def main(argv=None) -> int:
-    """Entry point: runs _run, swallowing SIGPIPE so piping to tools like
-    ``head`` doesn't dump a noisy BrokenPipeError trace."""
+    """Entry point.
+
+    On POSIX, a closed output pipe terminates the process conventionally via
+    SIGPIPE (silent, no traceback, exit 141) so ``lumina ... | head`` behaves
+    like any other Unix tool. On platforms without SIGPIPE, a BrokenPipeError
+    is swallowed and the stream abandoned so shutdown produces no noise.
+    """
+    _install_sigpipe_dfl()
     try:
         return _run(argv)
     except BrokenPipeError:
-        # Downstream closed the pipe; exit quietly with success.
+        # Fallback (e.g. Windows): abandon the broken stream quietly.
         import os
+        try:
+            sys.stdout.close()
+        except Exception:  # noqa: BLE001,S110 - best-effort abandon
+            pass
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, 1)
         return 0

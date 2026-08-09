@@ -51,19 +51,28 @@ def test_still_output_is_clean_redirect(capsys):
     assert "\x1b[0m" in out              # ends cleanly with RESET
 
 
-def test_broken_pipe_is_swallowed(monkeypatch):
-    """main() must return 0 when a downstream pipe closes (finding SIGPIPE)."""
+def test_pipe_to_closed_reader_is_silent(tmp_path):
+    """Real closed-pipe reproduction (finding A): pipe a ~98KB still into a
+    consumer that closes early. The interpreter-shutdown flush previously
+    surfaced a BrokenPipeError traceback (exit 120); it must now die silently
+    with no traceback — either via conventional SIGPIPE (-13/141) or the
+    BrokenPipeError fallback (0)."""
     import os
+    import subprocess
+    import sys
 
-    class Growly:
-        def write(self, _s):
-            raise BrokenPipeError()
-        def flush(self):
-            pass
-
-    # main() does `import os` (same module) then dup2s to /dev/null; patch the
-    # global os so the handler can't hijack the real fd 1 during the test.
-    monkeypatch.setattr(os, "dup2", lambda *a, **k: None)
-    monkeypatch.setattr(os, "open", lambda *a, **k: 999)
-    monkeypatch.setattr("sys.stdout", Growly())
-    assert cli.main(["--effect", "plasma", "--still", "0.5"]) == 0
+    errf = tmp_path / "stderr.txt"
+    with errf.open("w") as perr:
+        r, w = os.pipe()
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "lumina", "--effect", "plasma", "--still", "0.5"],
+            stdout=w,
+            stderr=perr,
+        )
+        os.close(w)
+        os.close(r)  # close the reader immediately -> writer hits closed pipe
+        rc = proc.wait(timeout=15)
+    err = errf.read_text()
+    assert "Traceback" not in err
+    assert "BrokenPipeError" not in err
+    assert rc in (0, -13, 141)  # clean fallback, or conventional SIGPIPE

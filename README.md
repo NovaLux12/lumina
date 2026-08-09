@@ -109,7 +109,9 @@ The suite (40 tests) genuinely asserts behaviour across every layer:
 - **CLI / engine / gallery** — the interactive surface, which was the
   hardest layer to make honest: still frames are cleanly redirectable
   (no screen-clear/cursor churn), unknown effect/palette exit with code
-  `2`, aliases resolve, SIGPIPE is swallowed, the non-TTY path renders a
+  `2`, aliases resolve, and a closed output pipe (`lumina ... | head`)
+  terminates **conventionally via SIGPIPE** — silently, no traceback, the
+  same behaviour as other Unix tools. The non-TTY path renders a
   **bounded** number of frames and exits (no runaway stream), and both
   export paths write exactly the requested file count with correct
   dimensions.
