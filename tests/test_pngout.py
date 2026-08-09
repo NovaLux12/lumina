@@ -41,3 +41,11 @@ def test_rgba_writes_and_decompresses(tmp_path):
     raw = zlib.decompress(chunks[1][1])
     # filter byte + 4 channels * 2 px per row
     assert len(raw) == 1 * (1 + 2 * 4)
+
+
+def test_write_rgb_creates_parent_dirs(tmp_path):
+    nested = tmp_path / "a" / "b" / "c"
+    p = nested / "out.png"
+    rows = [[(1, 2, 3), (4, 5, 6)], [(7, 8, 9), (10, 11, 12)]]
+    pngout.write_rgb(str(p), 2, 2, rows)
+    assert p.exists() and p.stat().st_size > 20

@@ -25,8 +25,15 @@ def _chunk(tag: bytes, data: bytes) -> bytes:
     )
 
 
+def _ensure_parent(path: str) -> None:
+    import os
+
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+
+
 def write_rgb(path: str, width: int, height: int, rows: Sequence[Sequence[tuple[int, int, int]]]) -> None:
     """Write *rows* (top-to-bottom, each a sequence of (r,g,b) tuples) to *path*."""
+    _ensure_parent(path)
     ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)  # 8-bit, colour type 2 (RGB)
     raw = bytearray()
     for row in rows:
@@ -44,6 +51,7 @@ def write_rgb(path: str, width: int, height: int, rows: Sequence[Sequence[tuple[
 
 def write_rgba(path: str, width: int, height: int, rows: Sequence[Sequence[tuple[int, int, int, int]]]) -> None:
     """Write 8-bit RGBA pixels (a = alpha) to *path*."""
+    _ensure_parent(path)
     ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)  # colour type 6 (RGBA)
     raw = bytearray()
     for row in rows:
