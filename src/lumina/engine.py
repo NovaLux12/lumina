@@ -105,15 +105,16 @@ def animate_interactive(
 
     paused = False
     start = time.time()
+    sys.stdout.write(HIDE_CURSOR)  # hide once at start — never blank the screen
     try:
         while True:
             width, height = _terminal_size()
-            frame = capture(
-                eff, pal, width, height, time.time() if not paused else 0.0, gamma,
-                quiet=False,
-            )
-            sys.stdout.write("\x1b[0;0H")
-            sys.stdout.write(frame)
+            # Redraw every cell from the top-left in a single pass. Because we
+            # overwrite all cells there's nothing to clear, so no blank flash
+            # between frames (this is what made SSH look flickery).
+            frame = render_frame(eff, pal, width, height,
+                                 time.time() if not paused else 0.0, gamma)
+            sys.stdout.write("\x1b[0;0H" + frame + RESET)
             status = (
                 f"\x1b[38;2;120;120;255m  [{eff} | {pal} | {fps:.0f}fps"
                 + (" | PAUSED" if paused else "")
