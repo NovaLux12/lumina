@@ -15,6 +15,7 @@ from .engine import (
     DEFAULT_WIDTH,
     animate_interactive,
     capture,
+    export_gif,
     export_png_stills,
 )
 from .palettes import PALETTES, list_palettes
@@ -77,7 +78,13 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="export temporally-spaced ANSI frames to DIR and exit")
     p.add_argument("--png", metavar="DIR", default="",
                    help="render real PNG frames (stdlib-only encoder) to DIR and exit")
-    p.add_argument("--scale", type=int, default=2, help="PNG upscale factor per cell (default: 2)")
+    p.add_argument("--gif", metavar="OUT.GIF", default="",
+                   help="export an animated GIF (stdlib-only encoder) to OUT.GIF and exit")
+    p.add_argument("--show", action="store_true",
+                   help="autoplay: cycle through all effects automatically (setlist mode)")
+    p.add_argument("--interval", type=float, default=5.0,
+                   help="seconds between auto-cycling effects in --show mode (default: 5)")
+    p.add_argument("--scale", type=int, default=3, help="PNG/GIF upscale factor per cell (default: 3)")
     p.add_argument("--gallery", metavar="PNG", default="",
                    help="tile all effects into one portfolio PNG and exit")
     p.add_argument("--cell-w", type=int, default=40, help="gallery cell width (default: 40)")
@@ -116,6 +123,14 @@ def _run(argv=None) -> int:
 
     w = args.width or 0
     h = args.height or 0
+    if args.gif:
+        export_gif(
+            args.gif, eff, args.palette,
+            width=args.width or 64, height=args.height or 20,
+            frames=args.frames or 24, fps=args.fps, gamma=args.gamma,
+            scale=args.scale,
+        )
+        return 0
     if args.gallery:
         return _gallery_main(args)
     if args.png:
@@ -133,7 +148,10 @@ def _run(argv=None) -> int:
     if sys.stdout.isatty():
         sys.stdout.write(f"\n\x1b[38;2;120;200;255m✨ lumina\x1b[0m "
                          f"[{eff} | {args.palette}]  q to quit\n")
-    animate_interactive(eff, args.palette, args.fps, args.gamma)
+    animate_interactive(
+        eff, args.palette, args.fps, args.gamma,
+        interval=args.interval if args.show else 0.0,
+    )
     return 0
 
 

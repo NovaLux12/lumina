@@ -56,6 +56,7 @@ def animate_interactive(
     gamma: float = 1.0,
     out: str = "",
     frames: int | None = None,
+    interval: float = 0.0,
 ) -> None:
     """Run the live animation loop, honouring terminal width/height.
 
@@ -105,6 +106,7 @@ def animate_interactive(
 
     paused = False
     start = time.time()
+    next_change = (start + interval) if interval > 0 else None
     sys.stdout.write(HIDE_CURSOR)  # hide once at start — never blank the screen
     try:
         while True:
@@ -143,7 +145,12 @@ def animate_interactive(
                             idx = nxt
                             eff = names[idx]
 
-            time.sleep(max(0.0, (1.0 / fps) - (time.time() - start) % (1.0 / fps)))
+            now = time.time()
+            if next_change is not None and now >= next_change:
+                idx = (idx + 1) % len(names)
+                eff = names[idx]
+                next_change = now + interval
+            time.sleep(max(0.0, (1.0 / fps) - (now - start) % (1.0 / fps)))
     except KeyboardInterrupt:
         pass
     finally:
@@ -237,3 +244,49 @@ def export_png_stills(
         path = os.path.join(out, f"{effect}-{palette}-{i:03d}.png")
         write_rgb(path, img_w, img_h, rows)
     sys.stdout.write(f"[lumina] exported {n} PNG frame(s) ({img_w}x{img_h}) to {out}/\n")
+
+
+def export_gif(
+    out: str,
+    effect: str,
+    palette: str,
+    width: int = 64,
+    height: int = 20,
+    frames: int = 24,
+    fps: float = 12.0,
+    gamma: float = 1.0,
+    scale: int = 3,
+) -> None:
+    """Export a short animation loop as an animated GIF (stdlib only).
+
+    Renders *frames* temporally-spaced frames of *effect* and LZW-encodes
+    them with a shared gradient palette (sampled from the chosen palette), so
+    the GIF stays true to the source colours. Scales by ``scale`` to turn the
+    block-art resolution into crisp pixels.
+    """
+    from .gif import write_animated_gif
+    from .palettes import PALETTES, sample
+
+    n = frames if frames else 1
+    img_w = width * scale
+    img_h = height * 2 * scale
+    # Shared palette: the source gradient sampled to 256 steps.
+    pal = [sample(PALETTES[palette], v / 255.0) for v in range(256)]
+    delays_ms = int(1000.0 / max(fps, 1.0))
+
+    gif_frames = []
+    for i in range(n):
+        t = i / max(fps, 1.0)
+        img = []
+        for py in range(img_h):
+            row = []
+            for px in range(img_w):
+                x = (px / scale + 0.5) / width
+                y = (py / scale + 0.5) / (height * 2)
+                row.append(sample_value(palette, EFFECTS[effect](x, y, t), gamma))
+            img.append(row)
+        gif_frames.append(img)
+    write_animated_gif(out, img_w, img_h, gif_frames, delays_ms=delays_ms, palette=pal)
+    sys.stdout.write(
+        f"[lumina] exported {n}-frame GIF ({img_w}x{img_h}) to {out}\n"
+    )

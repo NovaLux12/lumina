@@ -51,11 +51,24 @@ lumina --effect mandala --palette retro --png ./still --frames 8 --scale 3
 
 # one image with every effect tiled side by side (portfolio preview)
 lumina --gallery gallery.png
+
+# export an animated GIF — moving proof, all stdlib (lumina's own LZW encoder)
+lumina --effect aurora --palette pine --gif loop.gif --frames 24 --fps 12 --scale 3
+
+# autoplay setlist: cycle through every effect automatically
+lumina --show --interval 6
 ```
 
 ### Live controls
 
 `1-6` pick an effect · `n` next effect · `p` pause · `+`/`-` fps · `q`/`ESC` quit.
+
+## Watch it move
+
+Rendered by lumina's own stdlib GIF encoder (`--gif`), so the repo preview
+animates without a single non-stdlib dependency:
+
+![lumina aurora loop](./docs/preview-aurora.gif)
 
 ## Gallery
 
@@ -81,9 +94,10 @@ src/lumina/
   effects.py   — the six effects + frame composer
   engine.py    — interactive loop, capture, ANSI/PNG export
   pngout.py    — minimal stdlib PNG writer (RGB + RGBA)
+  gif.py       — minimal stdlib animated GIF (GIF89a/LZW) encoder
   gallery.py   — tile all effects into one portfolio image
   cli.py       — argparse CLI (installable as `lumina`)
-tests/         — 41 unit tests across every layer incl. CLI, engine, gallery
+tests/         — 46 unit tests across every layer incl. CLI, engine, gallery
 ```
 
 ## Testing
@@ -91,10 +105,10 @@ tests/         — 41 unit tests across every layer incl. CLI, engine, gallery
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e . pytest
-python3 -m pytest   # 41 tests
+python3 -m pytest   # 46 tests
 ```
 
-The suite (41 tests) genuinely asserts behaviour across every layer:
+The suite (46 tests) genuinely asserts behaviour across every layer:
 
 - **Palettes** — the `sample()` gradient mapper: empty and single-anchor
   inputs, out-of-range clamping, endpoint anchors, smooth-no-spike ramps.
@@ -106,6 +120,10 @@ The suite (41 tests) genuinely asserts behaviour across every layer:
 - **ANSI** — truecolor escape formatting and clipping.
 - **PNG** — signature, IHDR fields, CRC and a zlib round-trip on the
   stdlib-only encoder.
+- **GIF** — structural parse of the animated output (header, logical
+  screen, global colour table, per-frame GCE delays, LZW sub-block sizing,
+  trailer) plus a decode round-trip against Pillow at authoring time, and
+  the CLI/engine export paths.
 - **CLI / engine / gallery** — the interactive surface, which was the
   hardest layer to make honest: still frames are cleanly redirectable
   (no screen-clear/cursor churn), unknown effect/palette exit with code
