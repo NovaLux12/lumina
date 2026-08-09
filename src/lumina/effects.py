@@ -47,62 +47,78 @@ def _clamp01(v: float) -> float:
 # --------------------------------------------------------------------------- #
 
 def _starfield(x: float, y: float, t: float) -> float:
-    """Hyperspace warp: stars stream outward from the centre along rays.
-
-    Each ray (angle bucket) hosts a deterministic stack of stars with
-    staggered phases and speeds, so the field reads as continuous motion
-    rather than a repeating stipple. Brightness peaks mid-flight and
-    extinguishes at the rim — the classic fly-toward-the-light look.
+    """Radial hyperspace warp: distinct stars streak out from a vanishing
+    point at the frame centre, bright near the core and tailing toward the
+    rim. Deterministic rays (stable per-star angle), so the field reads as
+    coherent warp rather than scatter.
     """
-    cx, cy = 0.5, 0.5
-    dx = x - cx
-    dy = y - cy
+    dx = x - 0.5
+    dy = y - 0.5
     r = math.hypot(dx, dy)
-    if r < 1e-6:
-        return 0.0
     ang = math.atan2(dy, dx)
-    # Angle bucket for stable per-ray seeding.
-    bucket = int(ang * 16.0)
-    layers = 5
+    n_stars = 34
     best = 0.0
-    for k in range(layers):
-        seed = _hash01(bucket, k * 7 + 1)
-        speed = 0.08 + 0.45 * _frac(seed * 997.0)
-        phase = _frac(t * speed + seed)
-        sr = 0.03 + 0.97 * phase  # this star's screen radius
-        d = abs(r - sr)
-        width = 0.018
-        b = max(0.0, 1.0 - d / width)
-        if b > 0.0:
-            fade = math.sin(phase * math.pi)  # zero at centre and rim
-            best = max(best, b * fade * fade)
-    return best
+    for i in range(n_stars):
+        s1 = _hash01(i, 11)
+        s2 = _hash01(i, 23)
+        sa = s1 * 2.0 * math.pi          # star's ray angle
+        speed = 0.35 + 0.65 * s2          # travel speed
+        phase = _frac(t * speed + s1)     # 0 = centre, 1 = rim
+        sr = 0.03 + 0.97 * phase          # screen radius of the star
+        # angular proximity to this star's ray
+        da = abs(ang - sa)
+        da = math.pi - abs(da - math.pi)  # wrap to [0, pi]
+        # radial proximity
+        dr = abs(r - sr)
+        w_ang = 0.022                      # thin streak wedge
+        w_rad = 0.030 + 0.045 * phase      # streak widens toward rim
+        # brightness: bright core that tails along its ray
+        streak = math.exp(-(da / w_ang) ** 2) * math.exp(-(dr / w_rad) ** 2)
+        # life curve: dim at centre, peak mid-flight, fade at rim
+        life = math.sin(phase * math.pi)
+        best = max(best, streak * life * life)
+    return _clamp01(best * 1.6)
 
 
 def _plasma(x: float, y: float, t: float) -> float:
-    """Classic interference plasma: layered drifting sine waves."""
-    v = (
-        math.sin(x * 5.2 + t * 1.3)
-        + math.sin(y * 4.7 + t * 0.9)
-        + math.sin((x + y) * 6.1 + t * 1.7)
-        + math.sin(math.hypot(x - 0.5, y - 0.5) * 12.0 - t * 2.2)
-    ) / 4.0
-    return _clamp01(0.5 + 0.5 * v)
+    """Dense interference plasma. Several high-frequency sine systems
+    (horizontal, vertical, diagonal, radial) sum to fine, flowing bands that
+    clearly read as plasma rather than a blur. Integer t-coefficients keep it
+    exactly periodic in t (period 2*pi).
+    """
+    f = 17.0
+    h = math.sin(x * f + t * 1.0)
+    vb = math.sin(y * f - t * 2.0)
+    d1 = math.sin((x + y) * f * 1.15 + t * 3.0)
+    d2 = math.sin((x - y) * f * 0.85 - t * 4.0)
+    r = math.hypot(x - 0.5, y - 0.5)
+    rp = math.sin(r * f * 1.5 - t * 5.0)
+    v = (h + vb + d1 + d2 + rp) / 5.0
+    v = 0.5 + 0.5 * v
+    return _clamp01((v - 0.5) * 1.9 + 0.5)
 
 
 def _aurora(x: float, y: float, t: float) -> float:
-    """Northern-lights ribbons that undulate and layer overhead."""
+    """Northern-lights ribbons that undulate overhead, with soft falloff
+    into a dark sky dotted with faint stars."""
     bands = 4
     best = 0.0
     for i in range(bands):
         speed = 0.7 + 0.3 * i
-        base = 0.18 + 0.22 * _frac(_hash01(i, 0) * 9.9 + t * 0.02)
-        amp = 0.05 + 0.03 * i
+        base = 0.16 + 0.24 * _frac(_hash01(i, 0) * 9.9 + t * 0.02)
+        amp = 0.05 + 0.035 * i
         centre = base + amp * math.sin(x * (2.5 + i) + t * speed)
-        falloff = math.exp(-abs(y - centre) * (14.0 - 3.0 * i))
-        shimmer = 0.85 + 0.15 * math.sin(x * 40.0 + t * 3.0 * (i + 1))
+        falloff = math.exp(-abs(y - centre) * (9.0 - 2.0 * i))  # soakier
+        shimmer = 0.8 + 0.2 * math.sin(x * 40.0 + t * 3.0 * (i + 1))
         best = max(best, falloff * shimmer)
-    return _clamp01(best * (1.0 - y * 0.35))  # brighter overhead
+    ribbon = _clamp01(best * (1.0 - y * 0.28))
+    # faint pinprick stars toward the top of the frame
+    sx = int(x * 90.0)
+    sy = int(y * 60.0)
+    star = 0.0
+    if y < 0.35 and _hash01(sx, sy, 7) > 0.97:
+        star = 0.5 + 0.5 * math.sin(t * 3.0 + sx)
+    return _clamp01(ribbon + 0.35 * star)
 
 
 def _matrix(x: float, y: float, t: float) -> float:
@@ -120,12 +136,27 @@ def _matrix(x: float, y: float, t: float) -> float:
 
 
 def _fire(x: float, y: float, t: float) -> float:
-    """Wall of flame: brightest at the base, turbulent upward."""
-    up = 1.0 - y  # 1 at bottom, 0 at top
-    turbulence = 0.5 + 0.5 * math.sin(x * 9.0 + t * 4.0 + y * 14.0)
-    core = 0.5 + 0.5 * math.sin(x * 4.0 - t * 2.5)
-    v = up * (0.35 + 0.65 * turbulence) * (0.7 + 0.3 * core)
-    return _clamp01(v * 1.35)
+    """A clear vertical teardrop flame: wide bright base narrowing to a
+    rounded glowing tip, with a hot inner core, gentle x-only flicker and
+    rising embers. No y-frequency modulation, so it reads as a flame column
+    rather than horizontal streaks. Integer t-coefficients keep it exactly
+    periodic in t (period 2*pi).
+    """
+    tip = 0.08
+    s = max(0.0, min(1.0, (y - tip) / (1.0 - tip)))  # 0 tip..1 base
+    dx = x - 0.5
+    half = 0.34 * (s ** 0.75) + 1e-6                  # silhouette half-width
+    # Brightness peaks in the lower-middle, dying toward base rim and tip.
+    prof = math.sin(s * math.pi) ** 0.8
+    # Symmetric flame body with soft edge falloff.
+    body = math.exp(-((dx / half) ** 2)) * prof
+    # Hot, narrow inner core down the middle.
+    inner = math.exp(-((dx / (half * 0.45 + 0.02)) ** 2)) * prof
+    # Gentle flicker only along x (keeps vertical structure intact).
+    flick = 0.82 + 0.18 * math.sin(x * 9.0 + t * 5.0)
+    # Rising embers.
+    ember = 0.15 * max(0.0, math.sin(x * 44.0 + t * 9.0 + y * 16.0)) * (1.0 - y)
+    return _clamp01((body * 0.75 + inner * 0.6) * flick + ember)
 
 
 def _mandala(x: float, y: float, t: float) -> float:
