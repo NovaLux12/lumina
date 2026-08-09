@@ -18,10 +18,11 @@ DEFAULT_HEIGHT = 28
 DEFAULT_FPS = 30
 
 
-def _terminal_size() -> tuple:
+def _terminal_size() -> tuple[int, int]:
+    """Best-effort terminal size; falls back to defaults off a TTY."""
     try:
         w, h = shutil.get_terminal_size(fallback=(DEFAULT_WIDTH, DEFAULT_HEIGHT))
-    except Exception:  # noqa: BLE001 - non-TTY fallback must degrade gracefully
+    except Exception:  # noqa: BLE001 - size is advisory; never crash on it
         return DEFAULT_WIDTH, DEFAULT_HEIGHT
     # Leave a couple of lines for a status bar when interactive.
     return max(16, w), max(8, h - 2)
@@ -36,18 +37,23 @@ def capture(
     gamma: float = 1.0,
     quiet: bool = True,
 ) -> str:
-    """Render a single frame as a full ANSI string (with cursor-off/reset)."""
+    """Render a single frame as a full ANSI string.
+
+    With ``quiet=True`` the frame is cleanly redirectable (no screen-clear
+    or cursor churn). ``quiet=False`` wraps it in cursor-off/on and a
+    clear-screen, which is only appropriate for the live interactive loop.
+    """
     frame = render_frame(effect, palette, width, height, t, gamma)
-    prefix = "" if quiet else (clear_screen() + HIDE_CURSOR)
-    suffix = SHOW_CURSOR if not quiet else ""
-    return prefix + frame + RESET + suffix
+    if quiet:
+        return frame + RESET
+    return clear_screen() + HIDE_CURSOR + frame + RESET + SHOW_CURSOR
 
 
 def animate_interactive(
-    effect: str,
-    palette: str,
-    fps: float,
-    gamma: float,
+    effect: str = DEFAULT_EFFECT,
+    palette: str = DEFAULT_PALETTE,
+    fps: float = DEFAULT_FPS,
+    gamma: float = 1.0,
     out: str = "",
     frames: int | None = None,
 ) -> None:
@@ -55,17 +61,29 @@ def animate_interactive(
 
     Keys (when *out* is empty): ``1-6`` switch effect, ``n`` next effect,
     ``p`` toggle pause, ``+``/``-`` adjust fps, ``q``/``ESC`` quit.
-    When *out* is given instead, render *frames* stills to files and exit.
+    When *out* is given, render *frames* stills to files and exit. When
+    neither stdin nor stdout is a TTY (piped/CI), render a bounded one-shot
+    and exit rather than streaming frames forever.
     """
     names = list_effects()
     palettes = list_palettes()
-    idx = names.index(fx.resolve(effect)) if fx.resolve(effect) in names else 0
-    pid = palettes.index(palette) if palette in palettes else 0
-    eff = names[idx]
-    pal = palettes[pid]
+    eff = fx.resolve(effect) or names[0]
+    idx = names.index(eff) if eff in names else 0
+    pal = palette if palette in palettes else palettes[0]
 
     if out:
         export_stills(out, eff, pal, fps=fps, frames=frames, gamma=gamma)
+        return
+
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        # Piped / non-interactive: bounded one-shot instead of a firehose.
+        w, h = _terminal_size()
+        n = frames if frames else 1
+        for i in range(n):
+            sys.stdout.write(
+                capture(eff, pal, w, h, i / max(fps, 1.0), gamma, quiet=True) + "\n"
+            )
+        sys.stdout.flush()
         return
 
     try:
@@ -75,25 +93,27 @@ def animate_interactive(
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         tty.setcbreak(fd)
-    except Exception:  # noqa: BLE001 - non-TTY fallback must degrade gracefully
-        # Non-TTY fallback: no key handling, just stream frames.
-        try:
-            while True:
-                _width, _height = _terminal_size()
-                sys.stdout.write("\r" + capture(eff, pal, _width, _height, time.time(), gamma))
-                sys.stdout.flush()
-                time.sleep(1.0 / fps)
-        except KeyboardInterrupt:
-            return
+    except Exception:  # noqa: BLE001 - fall back to a bounded one-shot
+        w, h = _terminal_size()
+        n = frames if frames else 1
+        for i in range(n):
+            sys.stdout.write(
+                capture(eff, pal, w, h, i / max(fps, 1.0), gamma, quiet=True) + "\n"
+            )
+        sys.stdout.flush()
+        return
 
     paused = False
     start = time.time()
     try:
         while True:
             width, height = _terminal_size()
-            # Reset cursor each frame so output doesn't scroll.
+            frame = capture(
+                eff, pal, width, height, time.time() if not paused else 0.0, gamma,
+                quiet=False,
+            )
             sys.stdout.write("\x1b[0;0H")
-            sys.stdout.write(capture(eff, pal, width, height, time.time() if not paused else 0, gamma))
+            sys.stdout.write(frame)
             status = (
                 f"\x1b[38;2;120;120;255m  [{eff} | {pal} | {fps:.0f}fps"
                 + (" | PAUSED" if paused else "")
@@ -102,15 +122,14 @@ def animate_interactive(
             sys.stdout.write(status)
             sys.stdout.flush()
 
-            # Drain any pending keypresses without blocking the render loop.
             keys = _pending_keys(fd)
             if keys:
                 for k in keys:
-                    if k == "q" or k == "\x1b":
+                    if k in ("q", "\x1b"):
                         return
                     elif k == "p":
                         paused = not paused
-                    elif k == "+" or k == "=":
+                    elif k in ("+", "="):
                         fps = min(120.0, fps + 5.0)
                     elif k == "-":
                         fps = max(5.0, fps - 5.0)
@@ -118,13 +137,12 @@ def animate_interactive(
                         idx = (idx + 1) % len(names)
                         eff = names[idx]
                     elif k in "123456":
-                        idx = int(k) - 1
-                        if 0 <= idx < len(names):
+                        nxt = int(k) - 1
+                        if 0 <= nxt < len(names):
+                            idx = nxt
                             eff = names[idx]
 
-            elapsed = time.time() - start
-            if fps > 0:
-                time.sleep(max(0.0, (1.0 / fps) - (time.time() - start - elapsed)))
+            time.sleep(max(0.0, (1.0 / fps) - (time.time() - start) % (1.0 / fps)))
     except KeyboardInterrupt:
         pass
     finally:
@@ -152,6 +170,7 @@ def _pending_keys(fd: int) -> list[str]:
             keys.append(ch.decode("utf-8", "replace"))
     except (OSError, ValueError):
         return keys
+    return keys
 
 
 def export_stills(
@@ -206,9 +225,9 @@ def export_png_stills(
     img_h = height * 2 * scale
     for i in range(n):
         t = i / max(fps, 1.0)
-        rows: list[list[tuple]] = []
+        rows: list[list[tuple[int, int, int]]] = []
         for r in range(img_h):
-            row: list[tuple] = []
+            row: list[tuple[int, int, int]] = []
             for c in range(img_w):
                 x = (c / scale + 0.5) / width
                 y = (r / scale + 0.5) / (height * 2)

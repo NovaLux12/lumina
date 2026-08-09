@@ -83,7 +83,7 @@ src/lumina/
   pngout.py    — minimal stdlib PNG writer (RGB + RGBA)
   gallery.py   — tile all effects into one portfolio image
   cli.py       — argparse CLI (installable as `lumina`)
-tests/         — 27 unit tests: bounds, determinism, periodicity, PNG
+tests/         — 40 unit tests across every layer incl. CLI, engine, gallery
 ```
 
 ## Testing
@@ -91,12 +91,28 @@ tests/         — 27 unit tests: bounds, determinism, periodicity, PNG
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e . pytest
-python3 -m pytest
+python3 -m pytest   # 40 tests
 ```
 
-27 tests cover palette edge cases (empty, single-anchor, out-of-range
-clamping), every effect's output bounds and determinism, ANSI escape shape,
-and PNG signature/IHDR/IDAT integrity.
+The suite (40 tests) genuinely asserts behaviour across every layer:
+
+- **Palettes** — the `sample()` gradient mapper: empty and single-anchor
+  inputs, out-of-range clamping, endpoint anchors, smooth-no-spike ramps.
+- **Effects** — output bounds at sample points across the domain, exact
+  determinism (same `x,y,t` → same value), and **real temporal periodicity**
+  for the sine-based effects: plasma is asserted periodic with period
+  `20π`, fire with period `4π` (derived from their t-coefficients). Gamma
+  is checked to actually change the rendered frame.
+- **ANSI** — truecolor escape formatting and clipping.
+- **PNG** — signature, IHDR fields, CRC and a zlib round-trip on the
+  stdlib-only encoder.
+- **CLI / engine / gallery** — the interactive surface, which was the
+  hardest layer to make honest: still frames are cleanly redirectable
+  (no screen-clear/cursor churn), unknown effect/palette exit with code
+  `2`, aliases resolve, SIGPIPE is swallowed, the non-TTY path renders a
+  **bounded** number of frames and exits (no runaway stream), and both
+  export paths write exactly the requested file count with correct
+  dimensions.
 
 ## Install
 

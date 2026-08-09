@@ -77,7 +77,7 @@ def _run(argv=None) -> int:
     if args.still is not None:
         w = args.width or DEFAULT_WIDTH
         h = args.height or DEFAULT_HEIGHT
-        sys.stdout.write(capture(eff, args.palette, w, h, args.still, args.gamma, quiet=False))
+        sys.stdout.write(capture(eff, args.palette, w, h, args.still, args.gamma, quiet=True))
         sys.stdout.write("\n")
         return 0
 

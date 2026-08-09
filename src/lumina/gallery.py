@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from .effects import EFFECTS, sample_value
+from .effects import EFFECTS, list_effects, sample_value
 from .pngout import write_rgb
 
 
@@ -39,12 +39,15 @@ def compose_gallery(
     effect_order: Sequence[str] | None = None,
     cell_w: int = 40,
     cell_h: int = 12,
-    cols: int = 3,
     t: float = 0.0,
     gamma: float = 1.0,
 ) -> int:
-    """Tile all effects (or a chosen order) into *out_path*; returns count."""
-    order = list(effect_order) if effect_order else list(EFFECTS.keys())
+    """Tile all effects (or a chosen order) into *out_path*; returns count.
+
+    Uses the curated ``list_effects()`` order by default; pass *effect_order*
+    to reorder or subset (e.g. ``["plasma", "aurora"]``).
+    """
+    order = list(effect_order) if effect_order else list_effects()
     # Build the big canvas row-by-row at the thumbnail pixel resolution.
     canvas: list[list[tuple[int, int, int]]] = []
     for idx, name in enumerate(order):

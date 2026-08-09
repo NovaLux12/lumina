@@ -1,4 +1,6 @@
 
+import math
+
 import pytest
 
 from lumina.effects import ALIASES, EFFECTS, list_effects, render_frame, resolve
@@ -30,12 +32,25 @@ def test_effects_are_deterministic():
         assert fn(0.31, 0.77, 2.75) == fn(0.31, 0.77, 2.75), name
 
 
-@pytest.mark.parametrize("name", ["starfield", "plasma", "fire", "matrix", "aurora"])
-def test_effects_are_temporal_periodic(name):
-    """Each effect must revisit the same frame for a fixed t — pure functions."""
-    fn = EFFECTS[name]
-    for x, y, t in [(0.4, 0.5, 0.0), (0.9, 0.1, 5.0)]:
-        assert fn(x, y, t) == fn(x, y, t + 0.0), (name, x, y, t)
+def test_plasma_is_temporally_periodic():
+    """Plasma combines sines with t-coefficients 1.3, 0.9, 1.7, 2.2.
+
+    T = 20*pi is a common period: 1.3*20pi=26pi=13*2pi, 0.9*20pi=18pi=9*2pi,
+    1.7*20pi=34pi=17*2pi, 2.2*20pi=44pi=22*2pi — all full rotations.
+    """
+    fn = EFFECTS["plasma"]
+    T = 20 * math.pi
+    for x, y, t in [(0.3, 0.7, 0.0), (0.9, 0.1, 3.3), (0.5, 0.5, 11.0)]:
+        assert fn(x, y, t) == pytest.approx(fn(x, y, t + T)), (x, y, t)
+
+
+def test_fire_is_temporally_periodic():
+    """Fire's t-coefficients are 4.0 and 2.5; T = 4*pi is a common period
+    (4*4pi=16pi=8*2pi and 2.5*4pi=10pi=5*2pi)."""
+    fn = EFFECTS["fire"]
+    T = 4 * math.pi
+    for x, y, t in [(0.2, 0.8, 0.0), (0.6, 0.4, 2.0)]:
+        assert fn(x, y, t) == pytest.approx(fn(x, y, t + T)), (x, y, t)
 
 
 def test_render_frame_produces_expected_shape():
@@ -65,3 +80,10 @@ def test_render_frame_time_variation_changes_output():
     a = render_frame("plasma", "nova", 16, 8, t=0.0)
     b = render_frame("plasma", "nova", 16, 8, t=2.5)
     assert a != b  # animation advances
+
+
+def test_gamma_changes_output():
+    """Gamma must actually affect the rendered frame (brightness curve)."""
+    lo = render_frame("plasma", "nova", 16, 8, t=1.0, gamma=0.3)  # brighter
+    hi = render_frame("plasma", "nova", 16, 8, t=1.0, gamma=3.0)  # darker
+    assert lo != hi
