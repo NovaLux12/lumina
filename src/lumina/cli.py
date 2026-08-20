@@ -62,37 +62,49 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog=(
             "effects: " + ", ".join(list_effects())
             + "  |  palettes: " + ", ".join(list_palettes())
+            + "\n"
+            "keys (interactive): 1-6 switch effect · n next · p pause · +/- fps · q/ESC quit"
         ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("-e", "--effect", default=DEFAULT_EFFECT,
+    g_render = p.add_argument_group("rendering")
+    g_render.add_argument("-e", "--effect", default=DEFAULT_EFFECT,
                    help=f"effect to render (default: {DEFAULT_EFFECT}); supports aliases like 'hyperspace'")
-    p.add_argument("-c", "--palette", default=DEFAULT_PALETTE,
+    g_render.add_argument("-c", "--palette", default=DEFAULT_PALETTE,
                    help=f"colour palette (default: {DEFAULT_PALETTE})")
-    p.add_argument("--width", type=int, default=0, help="character-column width (0 = auto/terminal)")
-    p.add_argument("--height", type=int, default=0, help="character-row height (0 = auto/terminal)")
-    p.add_argument("--fps", type=float, default=DEFAULT_FPS, help="frames per second (default: %(default)s)")
-    p.add_argument("--gamma", type=float, default=1.0, help="brightness gamma curve")
-    p.add_argument("--still", type=float, metavar="T", default=None,
+    g_render.add_argument("--width", type=int, default=0, help="character-column width (0 = auto/terminal)")
+    g_render.add_argument("--height", type=int, default=0, help="character-row height (0 = auto/terminal)")
+    g_render.add_argument("--fps", type=float, default=DEFAULT_FPS, help="frames per second (default: %(default)s)")
+    g_render.add_argument("--gamma", type=float, default=1.0, help="brightness gamma curve")
+    g_render.add_argument("--duration", type=float, default=0.0, metavar="SECS",
+                   help="auto-exit after SECS seconds in interactive/show mode (0 = run until q)")
+
+    g_still = p.add_argument_group("still / export")
+    g_still.add_argument("--still", type=float, metavar="T", default=None,
                    help="render a single frame at time T and print it, then exit")
-    p.add_argument("--export", metavar="DIR", default="",
+    g_still.add_argument("--export", metavar="DIR", default="",
                    help="export temporally-spaced ANSI frames to DIR and exit")
-    p.add_argument("--png", metavar="DIR", default="",
+    g_still.add_argument("--png", metavar="DIR", default="",
                    help="render real PNG frames (stdlib-only encoder) to DIR and exit")
-    p.add_argument("--gif", metavar="OUT.GIF", default="",
+    g_still.add_argument("--gif", metavar="OUT.GIF", default="",
                    help="export an animated GIF (stdlib-only encoder) to OUT.GIF and exit")
-    p.add_argument("--show", action="store_true",
-                   help="autoplay: cycle through all effects automatically (setlist mode)")
-    p.add_argument("--interval", type=float, default=5.0,
-                   help="seconds between auto-cycling effects in --show mode (default: 5)")
-    p.add_argument("--scale", type=int, default=3, help="PNG/GIF upscale factor per cell (default: 3)")
-    p.add_argument("--gallery", metavar="PNG", default="",
+    g_still.add_argument("--gallery", metavar="PNG", default="",
                    help="tile all effects into one portfolio PNG and exit")
-    p.add_argument("--cell-w", type=int, default=40, help="gallery cell width (default: 40)")
-    p.add_argument("--cell-h", type=int, default=12, help="gallery cell height (default: 12)")
-    p.add_argument("--frames", type=int, default=None, help="number of frames to export")
-    p.add_argument("--list-effects", action="store_true", help="print effect names")
-    p.add_argument("--list-palettes", action="store_true", help="print palette names")
-    p.add_argument("--version", action="version", version=f"lumina {__version__}")
+    g_still.add_argument("--cell-w", type=int, default=40, help="gallery cell width (default: 40)")
+    g_still.add_argument("--cell-h", type=int, default=12, help="gallery cell height (default: 12)")
+    g_still.add_argument("--frames", type=int, default=None, help="number of frames to export")
+    g_still.add_argument("--scale", type=int, default=3, help="PNG/GIF upscale factor per cell (default: 3)")
+
+    g_show = p.add_argument_group("show")
+    g_show.add_argument("--show", action="store_true",
+                   help="autoplay: cycle through all effects automatically (setlist mode)")
+    g_show.add_argument("--interval", type=float, default=5.0,
+                   help="seconds between auto-cycling effects in --show mode (default: 5)")
+
+    g_info = p.add_argument_group("info")
+    g_info.add_argument("--list-effects", action="store_true", help="list available effects")
+    g_info.add_argument("--list-palettes", action="store_true", help="list available palettes")
+    g_info.add_argument("--version", action="version", version=f"lumina {__version__}")
     return p
 
 
@@ -100,10 +112,36 @@ def _run(argv=None) -> int:
     args = _build_parser().parse_args(argv)
 
     if args.list_effects:
-        print("\n".join(list_effects()))
+        if sys.stdout.isatty():
+            # Delightful TTY table; piped output stays plain for scripting/tests.
+            descs = {
+                "starfield": "hyperspace warp — stars streak from centre",
+                "plasma": "interference plasma — rippling colour fields",
+                "aurora": "northern lights — undulating ribbons",
+                "matrix": "raining glyphs — bright head + trail",
+                "fire": "turbulent flame — brightest at the base",
+                "mandala": "rotating petals + ripple rings",
+            }
+            for name in list_effects():
+                print(f"  {name:<12} {descs.get(name, '')}")
+        else:
+            print("\n".join(list_effects()))
         return 0
     if args.list_palettes:
-        print("\n".join(list_palettes()))
+        if sys.stdout.isatty():
+            descs = {
+                "nova": "violet-black → magenta → solar gold",
+                "dusk": "nightfall blues → hot horizon",
+                "sunset": "plum dusk → coral → warm cream",
+                "pine": "emerald greens, teal shadows",
+                "ember": "black → ember orange → near-white",
+                "ice": "arctic cyan → white-blue",
+                "retro": "bold CGA-ish primaries",
+            }
+            for name in list_palettes():
+                print(f"  {name:<10} {descs.get(name, '')}")
+        else:
+            print("\n".join(list_palettes()))
         return 0
 
     eff = resolve(args.effect)
@@ -151,6 +189,7 @@ def _run(argv=None) -> int:
     animate_interactive(
         eff, args.palette, args.fps, args.gamma,
         interval=args.interval if args.show else 0.0,
+        duration=args.duration,
     )
     return 0
 

@@ -26,6 +26,7 @@ including the PNG encoder used for stills and gallery previews.
 |---------|------|
 | `nova` | Violet-black → magenta → solar gold (the namesake) |
 | `dusk` | Nightfall blues into a hot horizon |
+| `sunset` | Plum dusk → coral → warm cream (late-summer horizon) |
 | `pine` | Emerald greens with teal shadows (aurora favourite) |
 | `ember` | Black through ember orange to a near-white core |
 | `ice` | Arctic cyan and white-blue |

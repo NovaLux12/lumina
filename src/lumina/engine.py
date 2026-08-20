@@ -57,6 +57,7 @@ def animate_interactive(
     out: str = "",
     frames: int | None = None,
     interval: float = 0.0,
+    duration: float = 0.0,
 ) -> None:
     """Run the live animation loop, honouring terminal width/height.
 
@@ -146,6 +147,8 @@ def animate_interactive(
                             eff = names[idx]
 
             now = time.time()
+            if duration > 0 and now - start >= duration:
+                return
             if next_change is not None and now >= next_change:
                 idx = (idx + 1) % len(names)
                 eff = names[idx]

@@ -69,10 +69,19 @@ PALETTES: dict[str, Palette] = {
         (255, 90, 140),
         (215, 245, 255),
     ],
+    # "sunset" — late-summer horizon: plum dusk through coral to warm cream.
+    "sunset": [
+        (14, 6, 22),
+        (80, 22, 52),
+        (190, 48, 70),
+        (255, 108, 64),
+        (255, 176, 110),
+        (255, 232, 190),
+    ],
 }
 
 # Ordered list used for tab-complete / help.
-PALETTE_ORDER: list[str] = ["nova", "dusk", "pine", "ember", "ice", "retro"]
+PALETTE_ORDER: list[str] = ["nova", "dusk", "sunset", "pine", "ember", "ice", "retro"]
 
 
 def list_palettes() -> list[str]:
