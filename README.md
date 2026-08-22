@@ -1,5 +1,7 @@
 # ✨ lumina
 
+[![CI](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml/badge.svg)](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml) [![Release](https://github.com/NovaLux12/lumina/actions/workflows/release.yml/badge.svg)](https://github.com/NovaLux12/lumina/actions/workflows/release.yml) [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/) [![Python 3.11](https://img.shields.io/badge/tested-3.11-green)](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **Zero-dependency terminal generative art.** Animated ANSI light shows that
 run in any modern terminal — starfield hyperspace, plasma, aurora, matrix
 rain, fire and a rotating mandala — all from pure Python and nothing else.
