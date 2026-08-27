@@ -46,3 +46,16 @@ def test_compose_gallery_subset_order(tmp_path):
     w, h, _ = _decode_idat(out.read_bytes())
     assert w == 6 * 2
     assert h == 3 * 2 * 1  # single row
+
+
+def test_compose_gallery_scale_upsamples(tmp_path):
+    """scale=N must grow both dimensions by N (same geometry as the PNG/GIF
+    exporters) and still produce a well-formed PNG."""
+    out = tmp_path / "scaled.png"
+    n = gallery.compose_gallery("nova", str(out), cell_w=8, cell_h=4,
+                                cols=2, scale=3)
+    assert n == len(list_effects())
+    w, h, raw = _decode_idat(out.read_bytes())
+    assert w == 8 * 2 * 3
+    assert h == 4 * 2 * 3 * math.ceil(len(list_effects()) / 2)
+    assert len(raw) == h * (1 + w * 3)

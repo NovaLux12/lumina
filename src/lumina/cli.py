@@ -93,7 +93,7 @@ def _build_parser() -> argparse.ArgumentParser:
     g_still.add_argument("--cell-w", type=int, default=40, help="gallery cell width (default: 40)")
     g_still.add_argument("--cell-h", type=int, default=12, help="gallery cell height (default: 12)")
     g_still.add_argument("--frames", type=int, default=None, help="number of frames to export")
-    g_still.add_argument("--scale", type=int, default=3, help="PNG/GIF upscale factor per cell (default: 3)")
+    g_still.add_argument("--scale", type=int, default=3, help="PNG/GIF/gallery upscale factor per cell (default: 3)")
 
     g_show = p.add_argument_group("show")
     g_show.add_argument("--show", action="store_true",
@@ -222,7 +222,7 @@ def _gallery_main(args) -> int:
 
     count = compose_gallery(args.palette, args.gallery,
                             cell_w=args.cell_w, cell_h=args.cell_h,
-                            gamma=args.gamma)
+                            gamma=args.gamma, scale=args.scale)
     sys.stdout.write(f"[lumina] gallery: {count} effects -> {args.gallery}\n")
     return 0
 
