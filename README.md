@@ -1,6 +1,6 @@
 # ✨ lumina
 
-[![CI](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml/badge.svg)](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml) [![Release](https://github.com/NovaLux12/lumina/actions/workflows/release.yml/badge.svg)](https://github.com/NovaLux12/lumina/actions/workflows/release.yml) [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/) [![Python 3.11](https://img.shields.io/badge/tested-3.11-green)](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml/badge.svg)](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml) [![Release](https://github.com/NovaLux12/lumina/actions/workflows/release.yml/badge.svg)](https://github.com/NovaLux12/lumina/actions/workflows/release.yml) [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/) [![Python 3.11-3.13](https://img.shields.io/badge/tested-3.11%E2%80%933.13-green)](https://github.com/NovaLux12/lumina/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Zero-dependency terminal generative art.** Animated ANSI light shows that
 run in any modern terminal — starfield hyperspace, plasma, aurora, matrix
@@ -100,7 +100,7 @@ src/lumina/
   gif.py       — minimal stdlib animated GIF (GIF89a/LZW) encoder
   gallery.py   — tile all effects into one portfolio image
   cli.py       — argparse CLI (installable as `lumina`)
-tests/         — 46 unit tests across every layer incl. CLI, engine, gallery
+tests/         — 47 unit tests across every layer incl. CLI, engine, gallery
 ```
 
 ## Testing
@@ -108,10 +108,10 @@ tests/         — 46 unit tests across every layer incl. CLI, engine, gallery
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e . pytest
-python3 -m pytest   # 46 tests
+python3 -m pytest   # 47 tests
 ```
 
-The suite (46 tests) genuinely asserts behaviour across every layer:
+The suite (47 tests) genuinely asserts behaviour across every layer:
 
 - **Palettes** — the `sample()` gradient mapper: empty and single-anchor
   inputs, out-of-range clamping, endpoint anchors, smooth-no-spike ramps.
