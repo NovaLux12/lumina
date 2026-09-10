@@ -60,7 +60,13 @@ lumina --effect aurora --palette pine --gif loop.gif --frames 24 --fps 12 --scal
 
 # autoplay setlist: cycle through every effect automatically
 lumina --show --interval 6
+
+# stop automatically after 60s (demos / recordings)
+lumina --show --interval 6 --duration 60
 ```
+
+`--duration SECS` auto-exits interactive and `--show` mode after `SECS`
+seconds (default `0` = run until `q`).
 
 ### Live controls
 
