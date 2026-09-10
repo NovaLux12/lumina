@@ -6,5 +6,10 @@ on:
     branches: [main]
 jobs:
   ci:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
     uses: NovaLux12/.github/.github/workflows/python-ci.yml@main
-
+    with:
+      python-version: ${{ matrix.python-version }}
