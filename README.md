@@ -106,7 +106,7 @@ src/lumina/
   gif.py       — minimal stdlib animated GIF (GIF89a/LZW) encoder
   gallery.py   — tile all effects into one portfolio image
   cli.py       — argparse CLI (installable as `lumina`)
-tests/         — 47 unit tests across every layer incl. CLI, engine, gallery
+tests/         — 45 unit tests across every layer incl. CLI, engine, gallery
 ```
 
 ## Testing
@@ -114,10 +114,10 @@ tests/         — 47 unit tests across every layer incl. CLI, engine, gallery
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e . pytest
-python3 -m pytest   # 47 tests
+python3 -m pytest   # 45 tests
 ```
 
-The suite (47 tests) genuinely asserts behaviour across every layer:
+The suite (45 tests) genuinely asserts behaviour across every layer:
 
 - **Palettes** — the `sample()` gradient mapper: empty and single-anchor
   inputs, out-of-range clamping, endpoint anchors, smooth-no-spike ramps.
